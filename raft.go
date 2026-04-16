@@ -16,8 +16,12 @@ type RaftNode struct {
 	NodeState NodeState
 	TermNumber int
 	CurrentTerm int
-	ElectionTimeLimit time.Time
+	ElectionTimer *time.Time
 	Index int
 	Vote map[string]string
 
+}
+
+func LeaderElection() {
+	
 }
