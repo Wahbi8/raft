@@ -9,13 +9,13 @@ type NodeState int
 const (
 	Leader NodeState = iota
 	Follower
-	Condidate
+	Candidate
 )
 
 type RaftNode struct {
 	NodeState NodeState
 	TermNumber int
-	ElectionTimer *time.Time
+	ElectionTimer time.Time
 	Index int
 	VoteFor int
 }
@@ -30,15 +30,10 @@ type RequestVoteResp struct{
 	Term int
 	vote bool
 }
-//to be fixed: where i fiil the value of the current node
-var currentNode = RaftNode{
-	NodeState: 2,
-	TermNumber: 1,
-	Index: 1,
-	VoteFor: 0,
+type AppendEntriesArg struct{
+	// to be filled
 }
-
-//to be added: if harthBeat did not arive befor the harthBeat timer, change state and became a condidate
+//to be added: start timer if harthBeat did not arive befor the harthBeat timer, change state and became a condidate
 
 func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 	if arg.Term < rn.TermNumber {
@@ -60,3 +55,6 @@ func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 
 	return RequestVoteResp{Id: rn.Index, Term: rn.TermNumber, vote: false}
 }
+
+// create a goroutine to send harthbeat if the node is a leader 
+// create a goroutine if the node is a follower to become a candidate
