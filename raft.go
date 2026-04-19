@@ -58,3 +58,14 @@ func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 
 // create a goroutine to send harthbeat if the node is a leader 
 // create a goroutine if the node is a follower to become a candidate
+go func() {
+	for {
+		// how to decide the state of the node
+		if 
+		// start timer
+		// if leader send hartbeat and reset timer
+		// if follower reset timer if a harthbeat recieved or became a candidate if reached time limit 
+		// if candidate send requestvotearg
+		// how to impliment the random timer for leader election in the split vote case
+	}
+}()
