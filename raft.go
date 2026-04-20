@@ -1,14 +1,15 @@
-package raft 
+package raft
 
 import (
+	"math/rand"
 	"time"
 )
 
 type NodeState int
 
 const (
-	Leader NodeState = iota
-	Follower
+	Follower NodeState = iota
+	Leader
 	Candidate
 )
 
@@ -18,6 +19,7 @@ type RaftNode struct {
 	ElectionTimer time.Time
 	Index int
 	VoteFor int
+	HeartBeat chan bool
 }
 
 type RequestVoteArg struct{
@@ -33,7 +35,6 @@ type RequestVoteResp struct{
 type AppendEntriesArg struct{
 	// to be filled
 }
-//to be added: start timer if harthBeat did not arive befor the harthBeat timer, change state and became a condidate
 
 func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 	if arg.Term < rn.TermNumber {
@@ -56,16 +57,31 @@ func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 	return RequestVoteResp{Id: rn.Index, Term: rn.TermNumber, vote: false}
 }
 
-// create a goroutine to send harthbeat if the node is a leader 
-// create a goroutine if the node is a follower to become a candidate
-go func() {
+func(rn *RaftNode) run(){
 	for {
-		// how to decide the state of the node
-		if 
-		// start timer
-		// if leader send hartbeat and reset timer
-		// if follower reset timer if a harthbeat recieved or became a candidate if reached time limit 
-		// if candidate send requestvotearg
+		switch rn.NodeState {
+		case Follower:
+			timeout := time.Duration(150+rand.Intn(150)) * time.Millisecond
+            timer := time.NewTimer(timeout)
+			select {
+			case <-timer.C:
+				rn.NodeState = Candidate
+			case <-rn.HeartBeat:
+				timer.Stop()
+			}
+		case Leader:
+			timeout := time.Duration(100) * time.Millisecond
+            timer := time.NewTimer(timeout)
+			select {
+			case <- timer.C:
+				//send hartbeat 
+				timer.Stop()
+				time.Sleep(50 * time.Millisecond)
+			}
+		case Candidate:
+			// if candidate send requestvotearg
+		}
+		
 		// how to impliment the random timer for leader election in the split vote case
 	}
-}()
+}
