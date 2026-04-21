@@ -50,7 +50,7 @@ func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 	if (rn.VoteFor == 0 || rn.VoteFor == arg.Id) {
 		rn.VoteFor = arg.Id
 		// Every time I give a vote, I should reset my election timer 
-		// I need to create function rn.resetElectionTimer() 
+		// I need to create function rn.setElectionTimer() 
 		return RequestVoteResp{Id: rn.Index, Term: rn.TermNumber, vote: true}
 	}
 
@@ -58,11 +58,13 @@ func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 }
 
 func(rn *RaftNode) run(){
+	timeoutFollower := time.Duration(150+rand.Intn(150)) * time.Millisecond
+	timeoutLeader := time.Duration(100) * time.Millisecond
+
 	for {
 		switch rn.NodeState {
 		case Follower:
-			timeout := time.Duration(150+rand.Intn(150)) * time.Millisecond
-            timer := time.NewTimer(timeout)
+            timer := time.NewTimer(timeoutFollower)
 			select {
 			case <-timer.C:
 				rn.NodeState = Candidate
@@ -70,8 +72,7 @@ func(rn *RaftNode) run(){
 				timer.Stop()
 			}
 		case Leader:
-			timeout := time.Duration(100) * time.Millisecond
-            timer := time.NewTimer(timeout)
+            timer := time.NewTimer(timeoutLeader)
 			select {
 			case <- timer.C:
 				//send hartbeat 
@@ -79,9 +80,15 @@ func(rn *RaftNode) run(){
 				time.Sleep(50 * time.Millisecond)
 			}
 		case Candidate:
-			// if candidate send requestvotearg
+			rn.TermNumber ++
+			//vote for it self somehow
+			//reset election timer (where the f should i start it???)
+			//send requestvotearg
+			//if vote received from majority become the leader (how to compare :ah i need the add vote for in RequestVoteResp struct)
+			//if received AppendEntriesArg change state to follower
+			//if election time out is reached start now election (should i do this with a for)
 		}
 		
-		// how to impliment the random timer for leader election in the split vote case
+		// how to know if an election time out (i dont i just send the vote it the election is time out it will not recieve the vote	)
 	}
 }
