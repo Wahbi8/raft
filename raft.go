@@ -21,6 +21,9 @@ type RaftNode struct {
 	VoteFor int
 	HeartBeat chan bool
 	Id int
+	Log         []LogEntry
+    CommitIndex int
+    LastApplied int
 }
 
 type RequestVoteArg struct{
@@ -34,9 +37,9 @@ type RequestVoteResp struct{
 	vote bool
 }
 
-type Log struct{
-	LogEntery []string
-	Term int
+type LogEntry struct {
+    Command interface{}
+    Term    int
 }
 type AppendEntriesArg struct{
 	Term int
@@ -46,8 +49,15 @@ type AppendEntriesArg struct{
 	//entries
 	LeaderCommitIndex int
 }
+// type AppendEnteriesReq struct {
+// 	Term int
+
+// }
 
 // create a struct to store the votes to be used by candidates to decide on the leader
+type CandidatesVotes struct {
+
+}
 
 func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 	if arg.Term < rn.TermNumber {
@@ -83,7 +93,7 @@ func(rn *RaftNode) run(){
 			select {
 			case <-timer.C:
 				rn.NodeState = Candidate
-			case <-rn.HeartBeat:
+			case <-rn.HeartBeat: // if i am processing an appendEntries from leader there is no need to wait for hartbeat
 				timer.Stop()
 			}
 		case Leader:
@@ -99,10 +109,20 @@ func(rn *RaftNode) run(){
 			//vote for it self somehow 
 			rn.VoteFor = rn.Id
 			//reset election timer (where the f should i start it???)
+			timer := time.NewTimer(timeoutFollower)
 			//send requestvotearg
+			select{
+			case <-timer.C:
+				//start new election
+			case <-rn.HeartBeat:
+				rn.NodeState = Follower
+				timer.Stop()
+			case 
+			}
 			//if vote received from majority become the leader (how to compare :ah i need the add vote for in RequestVoteResp struct)
 			//if received AppendEntriesArg change state to follower
 			//if election time out is reached start now election (should i do this with a for or recursion)
+			//if became leader and received AppendEnteriesReq and candidate term = leader term candidate acknowledge the curent leader
 		}
 		
 		// how to know if an election time out (i dont i just send the vote it the election is time out it will not recieve the vote	)
