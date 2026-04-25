@@ -44,20 +44,17 @@ type LogEntry struct {
 type AppendEntriesArg struct{
 	Term int
 	LeaderId int
-	PrevLogIndex Log
+	PrevLogIndex LogEntry
 	PrevLogTerm int
 	//entries
 	LeaderCommitIndex int
 }
-// type AppendEnteriesReq struct {
-// 	Term int
-
-// }
+type VotesProcessor struct{ // this a way to compare votes
+	Term int
+	NodeId []int
+}
 
 // create a struct to store the votes to be used by candidates to decide on the leader
-type CandidatesVotes struct {
-
-}
 
 func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 	if arg.Term < rn.TermNumber {
@@ -111,13 +108,24 @@ func(rn *RaftNode) run(){
 			//reset election timer (where the f should i start it???)
 			timer := time.NewTimer(timeoutFollower)
 			//send requestvotearg
+
+			requestVoteRespCh := make(chan RequestVoteResp)
+			//add the votes to VotesProcessor votes via a pointer
+			resp := *VotesProcessor{}
+			resp.NodeId = 1
+			//find a way to know the number of nodes
+			nodesNum := 5
 			select{
 			case <-timer.C:
 				//start new election
 			case <-rn.HeartBeat:
 				rn.NodeState = Follower
 				timer.Stop()
-			case 
+			case <- requestVoteRespCh:
+				if len(VotesProcessor.NodeId) > nodesNum/2 {
+					rn.NodeState = Leader
+					timer.Stop()
+				}
 			}
 			//if vote received from majority become the leader (how to compare :ah i need the add vote for in RequestVoteResp struct)
 			//if received AppendEntriesArg change state to follower
