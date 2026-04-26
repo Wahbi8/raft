@@ -64,13 +64,12 @@ func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 	if arg.Term > rn.TermNumber {
 		rn.TermNumber = arg.Term
 		rn.NodeState = Follower
-		rn.VoteFor = 0 // Reset my vote for this new term
+		rn.VoteFor = 0
 	}
 
 	if (rn.VoteFor == 0 || rn.VoteFor == arg.Id) {
 		rn.VoteFor = arg.Id
-		// Every time I give a vote, I should reset my election timer 
-		// I need to create function rn.setElectionTimer() 
+		// I need to reset the election timer 
 		return RequestVoteResp{Id: rn.Id, Term: rn.TermNumber, vote: true}
 	}
 
@@ -109,10 +108,9 @@ func(rn *RaftNode) run(){
 			timer := time.NewTimer(timeoutFollower)
 			//send requestvotearg
 
-			requestVoteRespCh := make(chan RequestVoteResp)
+			requestVoteRespCh := make(chan RequestVoteResp) // this maight not work
 			//add the votes to VotesProcessor votes via a pointer
-			resp := *VotesProcessor{}
-			resp.NodeId = 1
+			resp := &VotesProcessor{}
 			//find a way to know the number of nodes
 			nodesNum := 5
 			select{
@@ -121,8 +119,23 @@ func(rn *RaftNode) run(){
 			case <-rn.HeartBeat:
 				rn.NodeState = Follower
 				timer.Stop()
-			case <- requestVoteRespCh:
-				if len(VotesProcessor.NodeId) > nodesNum/2 {
+			case vote := <- requestVoteRespCh:
+				if vote.vote {
+					exists := false
+
+					for _, id := range resp.NodeId {
+						if id == vote.Id {
+							exists = true
+							break
+						}
+					}
+
+					if !exists {
+						resp.NodeId = append(resp.NodeId, vote.Id)
+					}
+				}
+
+				if len(resp.NodeId) > nodesNum/2 {
 					rn.NodeState = Leader
 					timer.Stop()
 				}
@@ -136,3 +149,4 @@ func(rn *RaftNode) run(){
 		// how to know if an election time out (i dont i just send the vote it the election is time out it will not recieve the vote	)
 	}
 }
+//TODO: i need to clean up the comments
