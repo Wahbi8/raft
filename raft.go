@@ -54,12 +54,12 @@ type VotesProcessor struct{ // this a way to compare votes
 	NodeId []int
 }
 
-// create a struct to store the votes to be used by candidates to decide on the leader
-
 func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 	if arg.Term < rn.TermNumber {
 		return RequestVoteResp{Id: rn.Id, Term: rn.TermNumber, vote: false}
 	}
+
+	if rn.NodeState = Leader 
 
 	if arg.Term > rn.TermNumber {
 		rn.TermNumber = arg.Term
@@ -67,7 +67,7 @@ func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 		rn.VoteFor = 0
 	}
 
-	if (rn.VoteFor == 0 || rn.VoteFor == arg.Id) {
+	if (rn.VoteFor == 0 || rn.VoteFor == arg.Id) { // incorect need to be fixed
 		rn.VoteFor = arg.Id
 		// I need to reset the election timer 
 		return RequestVoteResp{Id: rn.Id, Term: rn.TermNumber, vote: true}
@@ -77,10 +77,8 @@ func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
 }
 
 func(rn *RaftNode) run(){
-	timeoutFollower := time.Duration(150+rand.Intn(150)) * time.Millisecond
+	timeoutFollower := time.Duration(150+rand.Intn(150)) * time.Millisecond // the randemazation is not correct	
 	timeoutLeader := time.Duration(100) * time.Millisecond
-
-	//start the election timer here
 
 	for {
 		switch rn.NodeState {
@@ -91,21 +89,24 @@ func(rn *RaftNode) run(){
 				rn.NodeState = Candidate
 			case <-rn.HeartBeat: // if i am processing an appendEntries from leader there is no need to wait for hartbeat
 				timer.Stop()
+			// case log := <-rn.Log: 			// To be continued
 			}
 		case Leader:
             timer := time.NewTimer(timeoutLeader)
+			requestVoteArg
 			select {
 			case <- timer.C:
 				//send hartbeat 
 				timer.Stop()
 				time.Sleep(50 * time.Millisecond)
+			case 
 			}
 		case Candidate:
 			rn.TermNumber ++
 			//vote for it self somehow 
 			rn.VoteFor = rn.Id
 			//reset election timer (where the f should i start it???)
-			timer := time.NewTimer(timeoutFollower)
+			timer := time.NewTimer(timeoutFollower) 
 			//send requestvotearg
 
 			requestVoteRespCh := make(chan RequestVoteResp) // this maight not work
