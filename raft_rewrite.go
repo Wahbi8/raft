@@ -36,3 +36,39 @@ type LogEntry struct {
     Command interface{}
     Term    int
 }
+
+type AppendEntries struct{
+    Term int
+    LeaderId int
+    PrevLogIndex int
+    PrevLogTerm int
+    Entries []LogEntry
+    LeaderCommit int
+
+}
+
+type AppendEntriesReply struct{
+    term int
+    success bool
+}
+
+type RequestVote struct{
+    Term int
+    CandidateId int
+    LastLogIndex int
+    LastLogTerm int
+
+}
+
+type RequestVoteReply struct{
+    term int
+    voteGranted bool
+}
+
+func (rn *RaftNode) sendRequestVote(peer int, args RequestVote, reply *RequestVoteReply) bool {
+    return true
+}
+
+func (rn *RaftNode) sendAppendEntries(peer int, args AppendEntries, reply *AppendEntriesReply) bool {
+    return true
+}
