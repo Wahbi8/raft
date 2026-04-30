@@ -61,8 +61,8 @@ type RequestVote struct{
 }
 
 type RequestVoteReply struct{
-    term int
-    voteGranted bool
+    Term int
+    VoteGranted bool
 }
 
 func (rn *RaftNode) sendRequestVote(peer int, args RequestVote, reply *RequestVoteReply) bool {
@@ -71,4 +71,20 @@ func (rn *RaftNode) sendRequestVote(peer int, args RequestVote, reply *RequestVo
 
 func (rn *RaftNode) sendAppendEntries(peer int, args AppendEntries, reply *AppendEntriesReply) bool {
     return true
+}
+
+func (rn *RaftNode) HandleRequestVote(arg RequestVote) RequestVoteReply {
+	if arg.Term < rn.currentTerm {
+		return RequestVoteReply{Term: rn.currentTerm, VoteGranted: false}
+	}
+
+	// if rn.NodeState = Leader 
+
+	if arg.Term > rn.currentTerm {
+		rn.currentTerm = arg.Term
+		rn.state = Follower
+		*rn.votedFor = 0
+	}
+
+	return RequestVoteReply{ Term: rn.currentTerm, VoteGranted: false}
 }
