@@ -78,13 +78,21 @@ func (rn *RaftNode) HandleRequestVote(arg RequestVote) RequestVoteReply {
 		return RequestVoteReply{Term: rn.currentTerm, VoteGranted: false}
 	}
 
-	// if rn.NodeState = Leader 
-
 	if arg.Term > rn.currentTerm {
 		rn.currentTerm = arg.Term
 		rn.state = Follower
-		*rn.votedFor = 0
+		rn.votedFor = &arg.CandidateId
 	}
 
+    lastLogIndex := len(rn.log) - 1
+    lastLogTerm := rn.log[lastLogIndex].Term
+
+    logOk := arg.LastLogTerm > lastLogTerm ||
+        (arg.LastLogTerm == lastLogTerm && arg.LastLogIndex >= lastLogIndex) 
+
+    // logOk is to make sure that the candidates have at least the same log as the follower to prevent electing a leader with less logs
+    if (rn.votedFor == nil || *rn.votedFor == arg.CandidateId) && logOk {
+	    return RequestVoteReply{ Term: rn.currentTerm, VoteGranted: true}
+    }
 	return RequestVoteReply{ Term: rn.currentTerm, VoteGranted: false}
 }
