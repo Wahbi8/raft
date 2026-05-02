@@ -48,8 +48,8 @@ type AppendEntries struct{
 }
 
 type AppendEntriesReply struct{
-    term int
-    success bool
+    Term int
+    Success bool
 }
 
 type RequestVote struct{
@@ -81,18 +81,33 @@ func (rn *RaftNode) HandleRequestVote(arg RequestVote) RequestVoteReply {
 	if arg.Term > rn.currentTerm {
 		rn.currentTerm = arg.Term
 		rn.state = Follower
-		rn.votedFor = &arg.CandidateId
+		rn.votedFor = nil
 	}
 
-    lastLogIndex := len(rn.log) - 1
-    lastLogTerm := rn.log[lastLogIndex].Term
+    lastLogIndex := 0
+    lastLogTerm := 0
+
+    if len(rn.log) > 0 {
+        lastLogIndex = len(rn.log) - 1
+        lastLogTerm = rn.log[lastLogIndex].Term
+    }
 
     logOk := arg.LastLogTerm > lastLogTerm ||
         (arg.LastLogTerm == lastLogTerm && arg.LastLogIndex >= lastLogIndex) 
 
     // logOk is to make sure that the candidates have at least the same log as the follower to prevent electing a leader with less logs
     if (rn.votedFor == nil || *rn.votedFor == arg.CandidateId) && logOk {
+        rn.votedFor = &arg.CandidateId
 	    return RequestVoteReply{ Term: rn.currentTerm, VoteGranted: true}
     }
 	return RequestVoteReply{ Term: rn.currentTerm, VoteGranted: false}
+}
+
+func (rn *RaftNode) HandleAppendEntries(arg AppendEntries) AppendEntriesReply {
+    if rn.currentTerm > arg.Term || arg.PrevLogIndex != arg.PrevLogTerm {
+        return AppendEntriesReply{Term: rn.currentTerm, Success: false }
+    }
+
+    
+    return AppendEntriesReply{}
 }
