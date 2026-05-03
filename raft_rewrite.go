@@ -104,10 +104,26 @@ func (rn *RaftNode) HandleRequestVote(arg RequestVote) RequestVoteReply {
 }
 
 func (rn *RaftNode) HandleAppendEntries(arg AppendEntries) AppendEntriesReply {
-    if rn.currentTerm > arg.Term || arg.PrevLogIndex != arg.PrevLogTerm {
-        return AppendEntriesReply{Term: rn.currentTerm, Success: false }
+    if arg.Term < rn.currentTerm {
+        return AppendEntriesReply{Term: rn.currentTerm, Success: false}
     }
 
-    
-    return AppendEntriesReply{}
+    if arg.Term > rn.currentTerm {
+        rn.currentTerm = arg.Term
+        rn.state = Follower
+        rn.votedFor = nil
+    }
+
+    if arg.PrevLogIndex >= len(rn.log) || rn.log[arg.PrevLogIndex].Term != arg.PrevLogTerm {
+        return AppendEntriesReply{Term: rn.currentTerm, Success: false}
+    }
+
+    // Rule 3 and 4 — conflict detection and append
+
+    // Rule 5 — update commitIndex
+    if arg.LeaderId > rn.commitIndex {
+        
+    }
+
+    return AppendEntriesReply{Term: rn.currentTerm, Success: true}
 }
