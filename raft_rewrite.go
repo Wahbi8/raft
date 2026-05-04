@@ -1,7 +1,11 @@
 package raft
 
-import "sync"
-
+import (
+    "sync"
+    "time"
+    "math/rand"
+)
+    
 type NodeState int
 
 const (
@@ -119,11 +123,39 @@ func (rn *RaftNode) HandleAppendEntries(arg AppendEntries) AppendEntriesReply {
     }
 
     // Rule 3 and 4 — conflict detection and append
+    for i, entry := range arg.Entries {
+        logIndex := arg.PrevLogIndex + 1 + i
+        if logIndex < len(rn.log) && rn.log[logIndex].Term != entry.Term {
+            rn.log = rn.log[:logIndex] // delete from conflict point onwards
+            break
+        }
+    }
+
+    for i, entry := range arg.Entries {
+        logIndex := arg.PrevLogIndex + 1 + i
+        if logIndex > len(rn.log) {
+            rn.log = append(rn.log, entry)
+        }
+    }
 
     // Rule 5 — update commitIndex
-    if arg.LeaderId > rn.commitIndex {
-        
+    if arg.LeaderCommit > rn.commitIndex {
+        rn.commitIndex = min(arg.LeaderCommit, len(rn.log)-1)
     }
 
     return AppendEntriesReply{Term: rn.currentTerm, Success: true}
+}
+
+func (rn *RaftNode) run() {
+    leaderTime := time.Duration(100) * time.Millisecond
+    randomTime := time.Duration(150+rand.Intn(150)) * time.Millisecond // the randemazation is not correct	
+  
+
+    for {
+        switch rn.state {
+        case Follower:
+            //starte the timer
+
+        }
+    }
 }
