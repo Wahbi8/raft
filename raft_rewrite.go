@@ -34,6 +34,10 @@ type RaftNode struct {
     // volatile leader state (Figure 2) — reinitialized after election
     nextIndex  []int
     matchIndex []int
+
+    // i am not sure this is correct (but it is fixing a problem)
+    AppendEntriesCh chan AppendEntries
+    RequestVoteCh chan RequestVote
 }
 
 type LogEntry struct {
@@ -150,11 +154,26 @@ func (rn *RaftNode) run() {
     leaderTime := time.Duration(100) * time.Millisecond
     randomTime := time.Duration(150+rand.Intn(150)) * time.Millisecond // the randemazation is not correct	
   
+    leaderTimer := time.NewTimer(leaderTime)
+    randomTimer := time.NewTimer(randomTime)
 
     for {
         switch rn.state {
         case Follower:
-            //starte the timer
+            select{
+            case <-randomTimer.C:
+                rn.state = Candidate
+                randomTimer.Reset(randomTime)
+            case arg := <- rn.AppendEntriesCh:
+                randomTimer.Reset(randomTime)
+                rn.HandleAppendEntries(arg)
+            case arg := <- rn.RequestVoteCh:
+                rn.HandleRequestVote(arg)
+            }
+        case Candidate:
+            select{
+                
+            }
 
         }
     }
