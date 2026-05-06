@@ -38,6 +38,8 @@ type RaftNode struct {
     // i am not sure this is correct (but it is fixing a problem)
     AppendEntriesCh chan AppendEntries
     RequestVoteCh chan RequestVote
+
+    RequestVoteReplyCh chan []RequestVoteReply
 }
 
 type LogEntry struct {
@@ -126,7 +128,7 @@ func (rn *RaftNode) HandleAppendEntries(arg AppendEntries) AppendEntriesReply {
         return AppendEntriesReply{Term: rn.currentTerm, Success: false}
     }
 
-    // Rule 3 and 4 — conflict detection and append
+    // Rule 3 from paper
     for i, entry := range arg.Entries {
         logIndex := arg.PrevLogIndex + 1 + i
         if logIndex < len(rn.log) && rn.log[logIndex].Term != entry.Term {
@@ -135,6 +137,7 @@ func (rn *RaftNode) HandleAppendEntries(arg AppendEntries) AppendEntriesReply {
         }
     }
 
+    // Rule 4 form paper
     for i, entry := range arg.Entries {
         logIndex := arg.PrevLogIndex + 1 + i
         if logIndex > len(rn.log) {
@@ -171,7 +174,43 @@ func (rn *RaftNode) run() {
                 rn.HandleRequestVote(arg)
             }
         case Candidate:
+            rn.currentTerm ++
+            rn.votedFor = &rn.id
+            randomTimer.Reset(randomTime)
+
+            logNum := 0
+
+            if len(rn.log) == 0 {
+                logNum = 1
+            } else {
+                logNum = len(rn.log) - 1
+            }
+
+            argRV := RequestVote{
+                Term: rn.currentTerm,
+                CandidateId: rn.id,
+                LastLogIndex: logNum,
+                LastLogTerm: rn.log[logNum].Term , 
+            }
+
+            replyCh := make(chan RequestVoteReply, 5) // i should use len(rn.peers) insted of static number
+            // i need a finction that allow me to know how many nodes are available      
+            // i will need this information in 3 spret places (to send the vote and append requests and to calculate the votes)
+            // for now i will fill the node number statically (and i should use rn.peers )
+            nodeNum := 5
+            for num := 1; num < nodeNum; num++ {
+                argRVRepply := &RequestVoteReply{}
+                ok := rn.sendRequestVote(num, argRV, argRVRepply)
+                if ok {
+                    replyCh <- *argRVRepply
+                }
+            }
             select{
+            case arg := <- rn.AppendEntriesCh:
+                rn.state = Follower
+                randomTimer.Reset(randomTime)
+                rn.HandleAppendEntries(arg)
+            case reply := <-replyCh:
                 
             }
 
