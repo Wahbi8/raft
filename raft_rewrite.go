@@ -24,7 +24,7 @@ type RaftNode struct {
 
     // persistent state (Figure 2)
     currentTerm int
-    votedFor    *int // the pointer so it can be null
+    votedFor    *int // the pointer so it can be null 
     log         []LogEntry
 
     // volatile state (Figure 2)
@@ -160,6 +160,7 @@ func (rn *RaftNode) run() {
     leaderTimer := time.NewTimer(leaderTime)
     randomTimer := time.NewTimer(randomTime)
 
+    nodeNum := 5
     for {
         switch rn.state {
         case Follower:
@@ -193,27 +194,56 @@ func (rn *RaftNode) run() {
                 LastLogTerm: rn.log[logNum].Term , 
             }
 
-            replyCh := make(chan RequestVoteReply, 5) // i should use len(rn.peers) insted of static number
             // i need a finction that allow me to know how many nodes are available      
             // i will need this information in 3 spret places (to send the vote and append requests and to calculate the votes)
             // for now i will fill the node number statically (and i should use rn.peers )
-            nodeNum := 5
-            for num := 1; num < nodeNum; num++ {
-                argRVRepply := &RequestVoteReply{}
-                ok := rn.sendRequestVote(num, argRV, argRVRepply)
-                if ok {
-                    replyCh <- *argRVRepply
-                }
-            }
-            select{
-            case arg := <- rn.AppendEntriesCh:
-                rn.state = Follower
-                randomTimer.Reset(randomTime)
-                rn.HandleAppendEntries(arg)
-            case reply := <-replyCh:
-                
-            }
+            
+            votes := 1
 
+            replyCh := make(chan RequestVoteReply, nodeNum-1) // i should use len(rn.peers) insted of static number
+
+            for num := 1; num < nodeNum; num++ {
+                go func(peer int) {
+                    argRVRepply := &RequestVoteReply{}
+                    ok := rn.sendRequestVote(peer, argRV, argRVRepply)
+                    if ok {
+                        replyCh <- *argRVRepply
+                    }
+                }(num)
+            }
+            ElectionLoop:
+            for {
+                select{
+                case reply := <-replyCh:
+                if reply.VoteGranted {
+                    votes++
+                    if votes >= nodeNum / 2 {
+                        rn.state = Leader
+                        // initialize leader state, send heartbeats...
+                        break ElectionLoop
+                    }
+                }
+                case arg := <- rn.AppendEntriesCh:
+                    rn.state = Follower
+                    randomTimer.Reset(randomTime)
+                    rn.HandleAppendEntries(arg)
+                    break ElectionLoop
+                case <-randomTimer.C:
+                    break ElectionLoop
+                }                
+            }
+        
+        case Leader:
+            select{
+            case <-leaderTimer.C:
+                arg := AppendEntries{}
+                argRepply := AppendEntriesReply{}
+                for num := 1; num < nodeNum; num++{
+                    rn.sendAppendEntries(num, arg, &argRepply)
+                }
+                leaderTimer.Reset(leaderTime)
+            
+            }
         }
     }
 }
