@@ -1,9 +1,10 @@
 package raft
 
 import (
-    "sync"
-    "time"
-    "math/rand"
+	"errors"
+	"math/rand"
+	"sync"
+	"time"
 )
     
 type NodeState int
@@ -40,6 +41,8 @@ type RaftNode struct {
     RequestVoteCh chan RequestVote
 
     RequestVoteReplyCh chan []RequestVoteReply
+
+    ClientCommandCh chan clientRequest
 }
 
 type LogEntry struct {
@@ -73,6 +76,11 @@ type RequestVote struct{
 type RequestVoteReply struct{
     Term int
     VoteGranted bool
+}
+
+type clientRequest struct {
+    command  interface{}
+    responseCh chan error  // or chan ClientResult
 }
 
 func (rn *RaftNode) sendRequestVote(peer int, args RequestVote, reply *RequestVoteReply) bool {
@@ -242,8 +250,26 @@ func (rn *RaftNode) run() {
                     rn.sendAppendEntries(num, arg, &argRepply)
                 }
                 leaderTimer.Reset(leaderTime)
-            
+            case req := <-rn.ClientCommandCh:
+                if rn.state != Leader {
+                    req.responseCh <- errors.New("ErrNotLeader")
+                    continue
+                }
             }
         }
     }
+}
+
+func (rn *RaftNode) ClientCommand(command interface{}) error {
+    if command == nil {
+        return errors.New("nil command")
+    }
+    req := clientRequest{
+        command:    command,
+        responseCh: make(chan error, 1),
+    }
+
+    rn.ClientCommandCh <- req
+
+    return <-req.responseCh 
 }
