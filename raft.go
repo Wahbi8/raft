@@ -1,153 +1,301 @@
-// package raft
+package raft
 
-// import (
-// 	"math/rand"
-// 	"time"
-// )
+import (
+	"errors"
+	"math/rand"
+	"sync"
+	"time"
+)
+    
+type NodeState int
 
-// type NodeState int
+const (
+	Follower NodeState = iota
+	Leader
+	Candidate
+)
 
-// const (
-// 	Follower NodeState = iota
-// 	Leader
-// 	Candidate
-// )
+type RaftNode struct {
+    mu sync.Mutex
 
-// type RaftNode struct {
-// 	NodeState NodeState
-// 	TermNumber int
-// 	ElectionTimer time.Time
-// 	IndexId int
-// 	VoteFor int
-// 	HeartBeat chan bool
-// 	Id int
-// 	Log         []LogEntry
-//     CommitIndex int
-//     LastApplied int
-// }
+    // identity
+    id    int
+    peers []string
+    state NodeState
 
-// type RequestVoteArg struct{
-// 	Term int
-// 	Id int
-// }
+    // persistent state (Figure 2)
+    currentTerm int
+    votedFor    *int // the pointer so it can be null 
+    log         []LogEntry
 
-// type RequestVoteResp struct{
-// 	Id int
-// 	Term int
-// 	vote bool
-// }
+    // volatile state (Figure 2)
+    commitIndex int
+    lastApplied int
 
-// type LogEntry struct {
-//     Command interface{}
-//     Term    int
-// }
-// type AppendEntriesArg struct{
-// 	Term int
-// 	LeaderId int
-// 	PrevLogIndex LogEntry
-// 	PrevLogTerm int
-// 	//entries
-// 	LeaderCommitIndex int
-// }
-// type VotesProcessor struct{ // this a way to compare votes
-// 	Term int
-// 	NodeId []int
-// }
+    // volatile leader state (Figure 2) — reinitialized after election
+    nextIndex  []int
+    matchIndex []int
 
-// func (rn *RaftNode) HandleRequestVote(arg RequestVoteArg) RequestVoteResp {
-// 	if arg.Term < rn.TermNumber {
-// 		return RequestVoteResp{Id: rn.Id, Term: rn.TermNumber, vote: false}
-// 	}
+    // i am not sure this is correct (but it is fixing a problem)
+    AppendEntriesCh chan AppendEntries
+    RequestVoteCh chan RequestVote
 
-// 	if rn.NodeState = Leader 
+    RequestVoteReplyCh chan []RequestVoteReply
 
-// 	if arg.Term > rn.TermNumber {
-// 		rn.TermNumber = arg.Term
-// 		rn.NodeState = Follower
-// 		rn.VoteFor = 0
-// 	}
+    ClientCommandCh chan clientRequest
+}
 
-// 	if (rn.VoteFor == 0 || rn.VoteFor == arg.Id) { // incorect need to be fixed
-// 		rn.VoteFor = arg.Id
-// 		// I need to reset the election timer 
-// 		return RequestVoteResp{Id: rn.Id, Term: rn.TermNumber, vote: true}
-// 	}
+type LogEntry struct {
+    Command interface{}
+    Term    int
+}
 
-// 	return RequestVoteResp{Id: rn.Id, Term: rn.TermNumber, vote: false}
-// }
+type AppendEntries struct{
+    Term int
+    LeaderId int
+    PrevLogIndex int
+    PrevLogTerm int
+    Entries []LogEntry
+    LeaderCommit int
 
-// func(rn *RaftNode) run(){
-// 	timeoutFollower := time.Duration(150+rand.Intn(150)) * time.Millisecond // the randemazation is not correct	
-// 	timeoutLeader := time.Duration(100) * time.Millisecond
+}
 
-// 	for {
-// 		switch rn.NodeState {
-// 		case Follower:
-//             timer := time.NewTimer(timeoutFollower)
-// 			select {
-// 			case <-timer.C:
-// 				rn.NodeState = Candidate
-// 			case <-rn.HeartBeat: // if i am processing an appendEntries from leader there is no need to wait for hartbeat
-// 				timer.Stop()
-// 			// case log := <-rn.Log: 			// To be continued
-// 			}
-// 		case Leader:
-//             timer := time.NewTimer(timeoutLeader)
-// 			requestVoteArg
-// 			select {
-// 			case <- timer.C:
-// 				//send hartbeat 
-// 				timer.Stop()
-// 				time.Sleep(50 * time.Millisecond)
-// 			case 
-// 			}
-// 		case Candidate:
-// 			rn.TermNumber ++
-// 			//vote for it self somehow 
-// 			rn.VoteFor = rn.Id
-// 			//reset election timer (where the f should i start it???)
-// 			timer := time.NewTimer(timeoutFollower) 
-// 			//send requestvotearg
+type AppendEntriesReply struct{
+    Term int
+    Success bool
+}
 
-// 			requestVoteRespCh := make(chan RequestVoteResp) // this maight not work
-// 			//add the votes to VotesProcessor votes via a pointer
-// 			resp := &VotesProcessor{}
-// 			//find a way to know the number of nodes
-// 			nodesNum := 5
-// 			select{
-// 			case <-timer.C:
-// 				//start new election
-// 			case <-rn.HeartBeat:
-// 				rn.NodeState = Follower
-// 				timer.Stop()
-// 			case vote := <- requestVoteRespCh:
-// 				if vote.vote {
-// 					exists := false
+type RequestVote struct{
+    Term int
+    CandidateId int
+    LastLogIndex int
+    LastLogTerm int
 
-// 					for _, id := range resp.NodeId {
-// 						if id == vote.Id {
-// 							exists = true
-// 							break
-// 						}
-// 					}
+}
 
-// 					if !exists {
-// 						resp.NodeId = append(resp.NodeId, vote.Id)
-// 					}
-// 				}
+type RequestVoteReply struct{
+    Term int
+    VoteGranted bool
+}
 
-// 				if len(resp.NodeId) > nodesNum/2 {
-// 					rn.NodeState = Leader
-// 					timer.Stop()
-// 				}
-// 			}
-// 			//if vote received from majority become the leader (how to compare :ah i need the add vote for in RequestVoteResp struct)
-// 			//if received AppendEntriesArg change state to follower
-// 			//if election time out is reached start now election (should i do this with a for or recursion)
-// 			//if became leader and received AppendEnteriesReq and candidate term = leader term candidate acknowledge the curent leader
-// 		}
-		
-// 		// how to know if an election time out (i dont i just send the vote it the election is time out it will not recieve the vote	)
-// 	}
-// }
-// //TODO: i need to clean up the comments
+type clientRequest struct {
+    command  interface{}
+    responseCh chan error  // or chan ClientResult
+}
+
+func (rn *RaftNode) sendRequestVote(peer int, args RequestVote, reply *RequestVoteReply) bool {
+    return true
+}
+
+func (rn *RaftNode) sendAppendEntries(peer int, args AppendEntries, reply *AppendEntriesReply) bool {
+    return true
+}
+
+func (rn *RaftNode) HandleRequestVote(arg RequestVote) RequestVoteReply {
+	if arg.Term < rn.currentTerm {
+		return RequestVoteReply{Term: rn.currentTerm, VoteGranted: false}
+	}
+
+	if arg.Term > rn.currentTerm {
+		rn.currentTerm = arg.Term
+		rn.state = Follower
+		rn.votedFor = nil
+	}
+
+    lastLogIndex := 0
+    lastLogTerm := 0
+
+    if len(rn.log) > 0 {
+        lastLogIndex = len(rn.log) - 1
+        lastLogTerm = rn.log[lastLogIndex].Term
+    }
+
+    logOk := arg.LastLogTerm > lastLogTerm ||
+        (arg.LastLogTerm == lastLogTerm && arg.LastLogIndex >= lastLogIndex) 
+
+    // logOk is to make sure that the candidates have at least the same log as the follower to prevent electing a leader with less logs
+    if (rn.votedFor == nil || *rn.votedFor == arg.CandidateId) && logOk {
+        rn.votedFor = &arg.CandidateId
+	    return RequestVoteReply{ Term: rn.currentTerm, VoteGranted: true}
+    }
+	return RequestVoteReply{ Term: rn.currentTerm, VoteGranted: false}
+}
+
+func (rn *RaftNode) HandleAppendEntries(arg AppendEntries) AppendEntriesReply {
+    if arg.Term < rn.currentTerm {
+        return AppendEntriesReply{Term: rn.currentTerm, Success: false}
+    }
+
+    if arg.Term > rn.currentTerm {
+        rn.currentTerm = arg.Term
+        rn.state = Follower
+        rn.votedFor = nil
+    }
+
+    if arg.PrevLogIndex >= len(rn.log) || rn.log[arg.PrevLogIndex].Term != arg.PrevLogTerm {
+        return AppendEntriesReply{Term: rn.currentTerm, Success: false}
+    }
+
+    // Rule 3 from paper
+    for i, entry := range arg.Entries {
+        logIndex := arg.PrevLogIndex + 1 + i
+        if logIndex < len(rn.log) && rn.log[logIndex].Term != entry.Term {
+            rn.log = rn.log[:logIndex] // delete from conflict point onwards
+            break
+        }
+    }
+
+    // Rule 4 form paper
+    for i, entry := range arg.Entries {
+        logIndex := arg.PrevLogIndex + 1 + i
+        if logIndex > len(rn.log) {
+            rn.log = append(rn.log, entry)
+        }
+    }
+
+    // Rule 5 — update commitIndex
+    if arg.LeaderCommit > rn.commitIndex {
+        rn.commitIndex = min(arg.LeaderCommit, len(rn.log)-1)
+    }
+
+    return AppendEntriesReply{Term: rn.currentTerm, Success: true}
+}
+
+func (rn *RaftNode) run() {
+    leaderTime := time.Duration(100) * time.Millisecond
+    randomTime := time.Duration(150+rand.Intn(150)) * time.Millisecond // the randemazation is not correct	
+  
+    leaderTimer := time.NewTimer(leaderTime)
+    randomTimer := time.NewTimer(randomTime)
+
+    nodeNum := 5
+    for {
+        switch rn.state {
+        case Follower:
+            select{
+            case <-randomTimer.C:
+                rn.state = Candidate
+                randomTimer.Reset(randomTime)
+            case arg := <- rn.AppendEntriesCh:
+                randomTimer.Reset(randomTime)
+                rn.HandleAppendEntries(arg)
+            case arg := <- rn.RequestVoteCh:
+                rn.HandleRequestVote(arg)
+            case req := <-rn.ClientCommandCh:
+                if rn.state != Leader {
+                    req.responseCh <- errors.New("Not Leader")
+                    continue
+                }
+            }
+        case Candidate:
+            select{
+            case req := <-rn.ClientCommandCh:
+                if rn.state != Leader {
+                    req.responseCh <- errors.New("Not Leader")
+                }
+            }
+            rn.currentTerm ++
+            rn.votedFor = &rn.id
+            randomTimer.Reset(randomTime)
+
+            logNum := 0
+
+            if len(rn.log) == 0 {
+                logNum = 1
+            } else {
+                logNum = len(rn.log) - 1
+            }
+
+            argRV := RequestVote{
+                Term: rn.currentTerm,
+                CandidateId: rn.id,
+                LastLogIndex: logNum,
+                LastLogTerm: rn.log[logNum].Term , 
+            }
+
+            // i need a finction that allow me to know how many nodes are available      
+            // i will need this information in 3 spret places (to send the vote and append requests and to calculate the votes)
+            // for now i will fill the node number statically (and i should use rn.peers )
+            
+            votes := 1
+
+            replyCh := make(chan RequestVoteReply, nodeNum-1) // i should use len(rn.peers) insted of static number
+
+            for num := 1; num < nodeNum; num++ {
+                go func(peer int) {
+                    argRVRepply := &RequestVoteReply{}
+                    ok := rn.sendRequestVote(peer, argRV, argRVRepply)
+                    if ok {
+                        replyCh <- *argRVRepply
+                    }
+                }(num)
+            }
+            ElectionLoop:
+            for {
+                select{
+                case reply := <-replyCh:
+                if reply.VoteGranted {
+                    votes++
+                    if votes >= nodeNum / 2 {
+                        rn.state = Leader
+                        // initialize leader state, send heartbeats...
+                        break ElectionLoop
+                    }
+                }
+                case arg := <- rn.AppendEntriesCh:
+                    rn.state = Follower
+                    randomTimer.Reset(randomTime)
+                    rn.HandleAppendEntries(arg)
+                    break ElectionLoop
+                case <-randomTimer.C:
+                    break ElectionLoop
+                }                
+            }
+        
+        case Leader:
+            select{
+            case <-leaderTimer.C:
+                arg := AppendEntries{}
+                argRepply := AppendEntriesReply{}
+                for num := 1; num < nodeNum; num++{
+                    rn.sendAppendEntries(num, arg, &argRepply)
+                }
+                leaderTimer.Reset(leaderTime)
+            //not correct need to be rewriten----------------------------------
+            case req := <- rn.ClientCommandCh:
+                rn.log = append(rn.log, LogEntry{
+                    Command: req.command,
+                    Term: rn.currentTerm,
+                })
+                rn.commitIndex++
+                argRepply := AppendEntriesReply{}
+                arg := AppendEntries{
+                    Term: rn.currentTerm,
+                    PrevLogIndex: rn.commitIndex - 1,
+                    PrevLogTerm: rn.currentTerm - 1,
+                    Entries: rn.log,
+                    LeaderCommit: rn.commitIndex,
+                }
+                for i := range nodeNum {
+                    rn.sendAppendEntries(i, arg, &argRepply)
+                }
+
+            }
+            //------------------------------------------------------------------
+        }
+    }
+}
+
+func (rn *RaftNode) ClientCommand(command interface{}) error {
+    if command == nil {
+        return errors.New("nil command")
+    }
+    req := clientRequest{
+        command:    command,
+        responseCh: make(chan error),
+    }
+
+    rn.ClientCommandCh <- req
+
+    return <-req.responseCh 
+}
