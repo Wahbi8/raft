@@ -33,7 +33,7 @@ type RaftNode struct {
     lastApplied int
 
     // volatile leader state (Figure 2) — reinitialized after election
-    nextIndex  []int
+    nextIndex  []int  // nextIndex for each follower,which is the index of the next log entry the leader will send to that follower
     matchIndex []int
 
     // i am not sure this is correct (but it is fixing a problem)
@@ -90,6 +90,7 @@ func (rn *RaftNode) sendRequestVote(peer int, args RequestVote, reply *RequestVo
 func (rn *RaftNode) sendAppendEntries(peer int, args AppendEntries, reply *AppendEntriesReply) bool {
     return true
 }
+
 
 func (rn *RaftNode) HandleRequestVote(arg RequestVote) RequestVoteReply {
 	if arg.Term < rn.currentTerm {
@@ -148,7 +149,7 @@ func (rn *RaftNode) HandleAppendEntries(arg AppendEntries) AppendEntriesReply {
     // Rule 4 form paper
     for i, entry := range arg.Entries {
         logIndex := arg.PrevLogIndex + 1 + i
-        if logIndex > len(rn.log) {
+        if logIndex >= len(rn.log) {
             rn.log = append(rn.log, entry)
         }
     }
@@ -162,9 +163,12 @@ func (rn *RaftNode) HandleAppendEntries(arg AppendEntries) AppendEntriesReply {
 }
 
 func (rn *RaftNode) run() {
+    rn.log = []LogEntry{{Term: 0, Command: nil}}
+
     leaderTime := time.Duration(100) * time.Millisecond
     randomTime := time.Duration(150+rand.Intn(150)) * time.Millisecond // the randemazation is not correct	
-  
+    // i need to fix the randomazation by sending a random parameter 'rand.Intn(150)' from the loop to make sure it is not the same every time
+
     leaderTimer := time.NewTimer(leaderTime)
     randomTimer := time.NewTimer(randomTime)
 
@@ -188,24 +192,20 @@ func (rn *RaftNode) run() {
                 }
             }
         case Candidate:
-            select{
-            case req := <-rn.ClientCommandCh:
-                if rn.state != Leader {
-                    req.responseCh <- errors.New("Not Leader")
-                }
-            }
+            
+            
             rn.currentTerm ++
             rn.votedFor = &rn.id
             randomTimer.Reset(randomTime)
 
             logNum := 0
-
-            if len(rn.log) == 0 {
-                logNum = 1
-            } else {
-                logNum = len(rn.log) - 1
-            }
-
+            // instead of this i need to initialize the process by sending an empty log "rn.log[logNum].Term (this is a bug)"
+            // if len(rn.log) == 0 {
+            //     logNum = 1
+            // } else {
+            //     logNum = len(rn.log) - 1
+            // }
+            //----------------------------------------------------------------------------------------------------------------
             argRV := RequestVote{
                 Term: rn.currentTerm,
                 CandidateId: rn.id,
@@ -236,7 +236,7 @@ func (rn *RaftNode) run() {
                 case reply := <-replyCh:
                 if reply.VoteGranted {
                     votes++
-                    if votes >= nodeNum / 2 {
+                    if votes > nodeNum / 2 {
                         rn.state = Leader
                         // initialize leader state, send heartbeats...
                         break ElectionLoop
@@ -250,6 +250,11 @@ func (rn *RaftNode) run() {
                 case <-randomTimer.C:
                     break ElectionLoop
                 }                
+            }
+
+            req := <-rn.ClientCommandCh
+            if rn.state != Leader {
+                req.responseCh <- errors.New("Not Leader")
             }
         
         case Leader:
@@ -267,16 +272,22 @@ func (rn *RaftNode) run() {
                     Command: req.command,
                     Term: rn.currentTerm,
                 })
-                rn.commitIndex++
-                argRepply := AppendEntriesReply{}
+                
                 arg := AppendEntries{
                     Term: rn.currentTerm,
                     PrevLogIndex: rn.commitIndex - 1,
                     PrevLogTerm: rn.currentTerm - 1,
-                    Entries: rn.log,
+                    Entries: []LogEntry{
+                        {
+                            Command: req.command,
+                            Term: rn.currentTerm,
+                        },
+                    },
                     LeaderCommit: rn.commitIndex,
                 }
                 for i := range nodeNum {
+                    argRepply := AppendEntriesReply{}
+
                     rn.sendAppendEntries(i, arg, &argRepply)
                 }
 
