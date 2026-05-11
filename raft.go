@@ -273,22 +273,27 @@ func (rn *RaftNode) run() {
                     Term: rn.currentTerm,
                 })
                 
-                arg := AppendEntries{
-                    Term: rn.currentTerm,
-                    PrevLogIndex: rn.commitIndex - 1,
-                    PrevLogTerm: rn.currentTerm - 1,
-                    Entries: []LogEntry{
-                        {
-                            Command: req.command,
-                            Term: rn.currentTerm,
-                        },
-                    },
-                    LeaderCommit: rn.commitIndex,
-                }
+                logIndex := len(rn.log) - 1
+
+                
                 for i := range nodeNum {
+
+                    arg := AppendEntries{
+                        Term: rn.currentTerm,
+                        PrevLogIndex: logIndex - 1,
+                        PrevLogTerm: rn.log[logIndex - 1].Term,
+                        Entries: []LogEntry{
+                            {
+                                Command: req.command,
+                                Term: rn.currentTerm,
+                            },
+                        },
+                        LeaderCommit: rn.commitIndex,
+                    }
                     argRepply := AppendEntriesReply{}
 
                     rn.sendAppendEntries(i, arg, &argRepply)
+                    // i need to send and process each node separately
                 }
 
             }
