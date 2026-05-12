@@ -18,17 +18,15 @@ const (
 type RaftNode struct {
     mu sync.Mutex
 
-    // identity
     id    int
     peers []string
     state NodeState
 
-    // persistent state (Figure 2)
     currentTerm int
     votedFor    *int // the pointer so it can be null 
     log         []LogEntry
 
-    // volatile state (Figure 2)
+    // volatile state
     commitIndex int
     lastApplied int
 
@@ -199,13 +197,7 @@ func (rn *RaftNode) run() {
             randomTimer.Reset(randomTime)
 
             logNum := 0
-            // instead of this i need to initialize the process by sending an empty log "rn.log[logNum].Term (this is a bug)"
-            // if len(rn.log) == 0 {
-            //     logNum = 1
-            // } else {
-            //     logNum = len(rn.log) - 1
-            // }
-            //----------------------------------------------------------------------------------------------------------------
+
             argRV := RequestVote{
                 Term: rn.currentTerm,
                 CandidateId: rn.id,
@@ -266,7 +258,7 @@ func (rn *RaftNode) run() {
                     rn.sendAppendEntries(num, arg, &argRepply)
                 }
                 leaderTimer.Reset(leaderTime)
-            //not correct need to be rewriten----------------------------------
+           
             case req := <- rn.ClientCommandCh:
                 rn.log = append(rn.log, LogEntry{
                     Command: req.command,
@@ -276,8 +268,10 @@ func (rn *RaftNode) run() {
                 logIndex := len(rn.log) - 1
 
                 
-                for i := range nodeNum {
+                for i := 0; i < nodeNum; i++ {
+                    if rn.nextIndex[0] == logIndex - 1 { //this is obvoicely wrong like the word 'obvoicely' but me in the future can fix it all like he always do 
 
+                    }
                     arg := AppendEntries{
                         Term: rn.currentTerm,
                         PrevLogIndex: logIndex - 1,
@@ -297,7 +291,7 @@ func (rn *RaftNode) run() {
                 }
 
             }
-            //------------------------------------------------------------------
+           
         }
     }
 }
