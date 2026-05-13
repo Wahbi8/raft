@@ -265,29 +265,23 @@ func (rn *RaftNode) run() {
                     Term: rn.currentTerm,
                 })
                 
-                logIndex := len(rn.log) - 1
-
-                
                 for i := 0; i < nodeNum; i++ {
-                    if rn.nextIndex[0] == logIndex - 1 { //this is obvoicely wrong like the word 'obvoicely' but me in the future can fix it all like he always do 
 
-                    }
+                    prevIdx := rn.nextIndex[i] - 1
+                    
                     arg := AppendEntries{
                         Term: rn.currentTerm,
-                        PrevLogIndex: logIndex - 1,
-                        PrevLogTerm: rn.log[logIndex - 1].Term,
-                        Entries: []LogEntry{
-                            {
-                                Command: req.command,
-                                Term: rn.currentTerm,
-                            },
-                        },
+                        PrevLogIndex: prevIdx,
+                        PrevLogTerm:  rn.log[prevIdx].Term,
+                        Entries: rn.log[rn.nextIndex[i]:],
                         LeaderCommit: rn.commitIndex,
                     }
                     argRepply := AppendEntriesReply{}
 
                     rn.sendAppendEntries(i, arg, &argRepply)
-                    // i need to send and process each node separately
+                    if argRepply.Success{
+                        rn.nextIndex[i] = rn.nextIndex[i] + 1
+                    }
                 }
 
             }
