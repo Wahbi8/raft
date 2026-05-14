@@ -163,6 +163,8 @@ func (rn *RaftNode) HandleAppendEntries(arg AppendEntries) AppendEntriesReply {
 func (rn *RaftNode) run() {
     rn.log = []LogEntry{{Term: 0, Command: nil}}
 
+    //i need to reset votedFor
+
     leaderTime := time.Duration(100) * time.Millisecond
     randomTime := time.Duration(150+rand.Intn(150)) * time.Millisecond // the randemazation is not correct	
     // i need to fix the randomazation by sending a random parameter 'rand.Intn(150)' from the loop to make sure it is not the same every time
@@ -264,11 +266,12 @@ func (rn *RaftNode) run() {
                     Command: req.command,
                     Term: rn.currentTerm,
                 })
-                
+
+                // i need to make sure not to send it to myself
                 for i := 0; i < nodeNum; i++ {
 
                     prevIdx := rn.nextIndex[i] - 1
-                    
+                        
                     arg := AppendEntries{
                         Term: rn.currentTerm,
                         PrevLogIndex: prevIdx,
@@ -276,13 +279,30 @@ func (rn *RaftNode) run() {
                         Entries: rn.log[rn.nextIndex[i]:],
                         LeaderCommit: rn.commitIndex,
                     }
+
                     argRepply := AppendEntriesReply{}
 
-                    rn.sendAppendEntries(i, arg, &argRepply)
-                    if argRepply.Success{
-                        rn.nextIndex[i] = rn.nextIndex[i] + 1
-                    }
+                    go func(server int, args AppendEntries) {
+                        
+
+                        ok := rn.sendAppendEntries(server, args, &argRepply)
+                        if !ok {
+                            return 
+                        }
+                        if argRepply.Term > rn.currentTerm {
+                            rn.state = Follower
+                            return
+                        }
+
+                        if argRepply.Success{
+                            rn.nextIndex[i] = prevIdx + len(args.Entries) + 1
+
+                        } else {
+                            return
+                        }
+                    }(i, arg)  
                 }
+                
 
             }
            
