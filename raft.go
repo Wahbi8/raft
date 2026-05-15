@@ -266,7 +266,7 @@ func (rn *RaftNode) run() {
                     Command: req.command,
                     Term: rn.currentTerm,
                 })
-
+                replyCh := make(chan AppendEntriesReply, nodeNum)
                 // i need to make sure not to send it to myself
                 for i := 0; i < nodeNum; i++ {
 
@@ -288,21 +288,33 @@ func (rn *RaftNode) run() {
                         ok := rn.sendAppendEntries(server, args, &argRepply)
                         if !ok {
                             return 
+                        }else {
+                            replyCh <- argRepply
                         }
-                        if argRepply.Term > rn.currentTerm {
-                            rn.state = Follower
-                            return
-                        }
+                        
 
-                        if argRepply.Success{
-                            rn.nextIndex[i] = prevIdx + len(args.Entries) + 1
+                        //modifying inside goroutine will cause a race condition
 
-                        } else {
-                            return
-                        }
+                        // if argRepply.Term > rn.currentTerm {
+                        //     rn.state = Follower
+                        //     return
+                        // }
+
+                        // if argRepply.Success{
+                        //     rn.nextIndex[i] = prevIdx + len(args.Entries) + 1
+
+                        // } else {
+                        //     return
+                        // }
                     }(i, arg)  
                 }
                 
+                for i := 0; i < nodeNum - 1; i++ {
+                    r := <- replyCh
+                    if r.Term > rn.currentTerm {
+                        rn.state = Follower
+                    }
+                } 
 
             }
            
