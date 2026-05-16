@@ -215,10 +215,10 @@ func (rn *RaftNode) run() {
 
             for num := 1; num < nodeNum; num++ {
                 go func(peer int) {
-                    argRVRepply := &RequestVoteReply{}
-                    ok := rn.sendRequestVote(peer, argRV, argRVRepply)
+                    argRVRepply := RequestVoteReply{}
+                    ok := rn.sendRequestVote(peer, argRV, &argRVRepply)
                     if ok {
-                        replyCh <- *argRVRepply
+                        replyCh <- argRVRepply
                     }
                 }(num)
             }
@@ -252,10 +252,35 @@ func (rn *RaftNode) run() {
         case Leader:
             select{
             case <-leaderTimer.C:
-                arg := AppendEntries{}
-                argRepply := AppendEntriesReply{}
-                for num := 1; num < nodeNum; num++{
-                    rn.sendAppendEntries(num, arg, &argRepply)
+                for i := 0; i < nodeNum; i++ {
+                    if i == rn.id {
+                        continue
+                    }
+                    rn.mu.Lock()
+                    arg := AppendEntries{
+                        Term : rn.currentTerm,
+                        LeaderId: rn.id,
+                        PrevLogIndex : rn.nextIndex[i] - 1,
+                        PrevLogTerm : rn.log[rn.nextIndex[i] - 1].Term,
+                        Entries: []LogEntry{},
+                        LeaderCommit: rn.commitIndex,
+                    }
+                    rn.mu.Unlock()
+                    go func(server int, arg AppendEntries) {
+                        argRepply := AppendEntriesReply{}
+                        ok := rn.sendAppendEntries(i, arg, &argRepply)
+                        if !ok {
+                            return
+                        }
+                        
+                        rn.mu.Lock()
+                        defer rn.mu.Unlock()
+                        if argRepply.Term > rn.currentTerm {
+                            rn.currentTerm = argRepply.Term
+                            rn.state = Follower
+                            rn.votedFor = nil
+                        }
+                    }(i, arg)
                 }
                 leaderTimer.Reset(leaderTime)
            
@@ -264,20 +289,24 @@ func (rn *RaftNode) run() {
                     Command: req.command,
                     Term: rn.currentTerm,
                 })
-                replyCh := make(chan AppendEntriesReply, nodeNum)
 
                 // i need to make sure not to send it to myself
                 for i := 0; i < nodeNum; i++ {
+                    if i == rn.id {
+                        continue
+                    }
 
                     prevIdx := rn.nextIndex[i] - 1
-                        
+                    rn.mu.Lock()
                     arg := AppendEntries{
                         Term: rn.currentTerm,
+                        LeaderId: rn.id,
                         PrevLogIndex: prevIdx,
                         PrevLogTerm:  rn.log[prevIdx].Term,
                         Entries: rn.log[rn.nextIndex[i]:],
                         LeaderCommit: rn.commitIndex,
                     }
+                    rn.mu.Unlock()
 
                     if len(rn.log) - 1 >= rn.nextIndex[i] {
                         go func(server int, args AppendEntries) {
@@ -288,33 +317,29 @@ func (rn *RaftNode) run() {
                                     return
                                 } 
 
-                                if argRepply.Success {
-                                    replyCh <- argRepply
+                                rn.mu.Lock()
+
+                                if argRepply.Term > rn.currentTerm {
+                                    rn.currentTerm = argRepply.Term
+                                    rn.state = Follower
+                                    rn.votedFor = nil
+                                    rn.mu.Unlock()
                                     return
-                                } else {
-                                    rn.nextIndex[i] = rn.nextIndex[i] - 1
-                                    // should i add Exponential Backoff here?
-                                    time.Sleep(10 * time.Millisecond)
+                                }
+
+                                if argRepply.Success {
+                                    rn.nextIndex[server] = args.PrevLogIndex + len(args.Entries) + 1
+                                    rn.matchIndex[server] = rn.nextIndex[server] - 1
+
+                                    rn.mu.Unlock()
+                                    return
+                                }else {
+                                    rn.nextIndex[server]--
+                                    rn.mu.Unlock()
                                 }
                             }
                         }(i, arg)  
                     } 
-                }
-                
-                replyCounter := 0
-                
-                for i := 0; i < nodeNum - 1; i++ {
-                    r := <- replyCh
-                    if r.Term > rn.currentTerm {
-                        rn.state = Follower
-                    }
-
-                    if r.Success {
-                        rn.nextIndex[i] = rn.nextIndex[i] + len(rn.log[rn.nextIndex[i]:])
-                        replyCounter++
-                    } else {
-                        return
-                    }
                 }
                 // update commitIndex and matchIndex
             }
