@@ -191,9 +191,7 @@ func (rn *RaftNode) run() {
                     continue
                 }
             }
-        case Candidate:
-            
-            
+        case Candidate: 
             rn.currentTerm ++
             rn.votedFor = &rn.id
             randomTimer.Reset(randomTime)
@@ -267,6 +265,7 @@ func (rn *RaftNode) run() {
                     Term: rn.currentTerm,
                 })
                 replyCh := make(chan AppendEntriesReply, nodeNum)
+
                 // i need to make sure not to send it to myself
                 for i := 0; i < nodeNum; i++ {
 
@@ -280,42 +279,44 @@ func (rn *RaftNode) run() {
                         LeaderCommit: rn.commitIndex,
                     }
 
-                    argRepply := AppendEntriesReply{}
+                    if len(rn.log) - 1 >= rn.nextIndex[i] {
+                        go func(server int, args AppendEntries) {
+                            argRepply := AppendEntriesReply{}
+                            for {
+                                ok := rn.sendAppendEntries(server, args, &argRepply)
+                                if !ok {
+                                    return
+                                } 
 
-                    go func(server int, args AppendEntries) {
-                        
-
-                        ok := rn.sendAppendEntries(server, args, &argRepply)
-                        if !ok {
-                            return 
-                        }else {
-                            replyCh <- argRepply
-                        }
-                        
-
-                        //modifying inside goroutine will cause a race condition
-
-                        // if argRepply.Term > rn.currentTerm {
-                        //     rn.state = Follower
-                        //     return
-                        // }
-
-                        // if argRepply.Success{
-                        //     rn.nextIndex[i] = prevIdx + len(args.Entries) + 1
-
-                        // } else {
-                        //     return
-                        // }
-                    }(i, arg)  
+                                if argRepply.Success {
+                                    replyCh <- argRepply
+                                    return
+                                } else {
+                                    rn.nextIndex[i] = rn.nextIndex[i] - 1
+                                    // should i add Exponential Backoff here?
+                                    time.Sleep(10 * time.Millisecond)
+                                }
+                            }
+                        }(i, arg)  
+                    } 
                 }
+                
+                replyCounter := 0
                 
                 for i := 0; i < nodeNum - 1; i++ {
                     r := <- replyCh
                     if r.Term > rn.currentTerm {
                         rn.state = Follower
                     }
-                } 
 
+                    if r.Success {
+                        rn.nextIndex[i] = rn.nextIndex[i] + len(rn.log[rn.nextIndex[i]:])
+                        replyCounter++
+                    } else {
+                        return
+                    }
+                }
+                // update commitIndex and matchIndex
             }
            
         }
