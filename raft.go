@@ -1,368 +1,368 @@
-package raft
+// package raft
 
-import (
-	"errors"
-	"math/rand"
-	"sync"
-	"time"
-)
+// import (
+// 	"errors"
+// 	"math/rand"
+// 	"sync"
+// 	"time"
+// )
     
-type NodeState int
+// type NodeState int
 
-const (
-	Follower NodeState = iota
-	Leader
-	Candidate
-)
+// const (
+// 	Follower NodeState = iota
+// 	Leader
+// 	Candidate
+// )
 
-type RaftNode struct {
-    mu sync.Mutex
+// type RaftNode struct {
+//     mu sync.Mutex
 
-    id    int
-    peers []string
-    state NodeState
+//     id    int
+//     peers []string
+//     state NodeState
 
-    currentTerm int
-    votedFor    *int // the pointer so it can be null 
-    log         []LogEntry
+//     currentTerm int
+//     votedFor    *int // the pointer so it can be null 
+//     log         []LogEntry
 
-    // volatile state
-    commitIndex int
-    lastApplied int
+//     // volatile state
+//     commitIndex int
+//     lastApplied int
 
-    // volatile leader state (Figure 2) — reinitialized after election
-    nextIndex  []int  // nextIndex for each follower,which is the index of the next log entry the leader will send to that follower
-    matchIndex []int
+//     // volatile leader state (Figure 2) — reinitialized after election
+//     nextIndex  []int  // nextIndex for each follower,which is the index of the next log entry the leader will send to that follower
+//     matchIndex []int
 
-    // i am not sure this is correct (but it is fixing a problem)
-    AppendEntriesCh chan AppendEntries
-    RequestVoteCh chan RequestVote
+//     // i am not sure this is correct (but it is fixing a problem)
+//     AppendEntriesCh chan AppendEntries
+//     RequestVoteCh chan RequestVote
 
-    RequestVoteReplyCh chan []RequestVoteReply
+//     RequestVoteReplyCh chan []RequestVoteReply
 
-    ClientCommandCh chan clientRequest
-}
+//     ClientCommandCh chan clientRequest
+// }
 
-type LogEntry struct {
-    Command interface{}
-    Term    int
-}
+// type LogEntry struct {
+//     Command interface{}
+//     Term    int
+// }
 
-type AppendEntries struct{
-    Term int
-    LeaderId int
-    PrevLogIndex int
-    PrevLogTerm int
-    Entries []LogEntry
-    LeaderCommit int
+// type AppendEntries struct{
+//     Term int
+//     LeaderId int
+//     PrevLogIndex int
+//     PrevLogTerm int
+//     Entries []LogEntry
+//     LeaderCommit int
 
-}
+// }
 
-type AppendEntriesReply struct{
-    Term int
-    Success bool
-}
+// type AppendEntriesReply struct{
+//     Term int
+//     Success bool
+// }
 
-type RequestVote struct{
-    Term int
-    CandidateId int
-    LastLogIndex int
-    LastLogTerm int
+// type RequestVote struct{
+//     Term int
+//     CandidateId int
+//     LastLogIndex int
+//     LastLogTerm int
 
-}
+// }
 
-type RequestVoteReply struct{
-    Term int
-    VoteGranted bool
-}
+// type RequestVoteReply struct{
+//     Term int
+//     VoteGranted bool
+// }
 
-type clientRequest struct {
-    command  interface{}
-    responseCh chan error  // or chan ClientResult
-}
+// type clientRequest struct {
+//     command  interface{}
+//     responseCh chan error  // or chan ClientResult
+// }
 
-func (rn *RaftNode) sendRequestVote(peer int, args RequestVote, reply *RequestVoteReply) bool {
-    return true
-}
+// func (rn *RaftNode) sendRequestVote(peer int, args RequestVote, reply *RequestVoteReply) bool {
+//     return true
+// }
 
-func (rn *RaftNode) sendAppendEntries(peer int, args AppendEntries, reply *AppendEntriesReply) bool {
-    return true
-}
+// func (rn *RaftNode) sendAppendEntries(peer int, args AppendEntries, reply *AppendEntriesReply) bool {
+//     return true
+// }
 
 
-func (rn *RaftNode) HandleRequestVote(arg RequestVote) RequestVoteReply {
-	if arg.Term < rn.currentTerm {
-		return RequestVoteReply{Term: rn.currentTerm, VoteGranted: false}
-	}
+// func (rn *RaftNode) HandleRequestVote(arg RequestVote) RequestVoteReply {
+// 	if arg.Term < rn.currentTerm {
+// 		return RequestVoteReply{Term: rn.currentTerm, VoteGranted: false}
+// 	}
 
-	if arg.Term > rn.currentTerm {
-		rn.currentTerm = arg.Term
-		rn.state = Follower
-		rn.votedFor = nil
-	}
+// 	if arg.Term > rn.currentTerm {
+// 		rn.currentTerm = arg.Term
+// 		rn.state = Follower
+// 		rn.votedFor = nil
+// 	}
 
-    lastLogIndex := 0
-    lastLogTerm := 0
+//     lastLogIndex := 0
+//     lastLogTerm := 0
 
-    if len(rn.log) > 0 {
-        lastLogIndex = len(rn.log) - 1
-        lastLogTerm = rn.log[lastLogIndex].Term
-    }
+//     if len(rn.log) > 0 {
+//         lastLogIndex = len(rn.log) - 1
+//         lastLogTerm = rn.log[lastLogIndex].Term
+//     }
 
-    logOk := arg.LastLogTerm > lastLogTerm ||
-        (arg.LastLogTerm == lastLogTerm && arg.LastLogIndex >= lastLogIndex) 
+//     logOk := arg.LastLogTerm > lastLogTerm ||
+//         (arg.LastLogTerm == lastLogTerm && arg.LastLogIndex >= lastLogIndex) 
 
-    // logOk is to make sure that the candidates have at least the same log as the follower to prevent electing a leader with less logs
-    if (rn.votedFor == nil || *rn.votedFor == arg.CandidateId) && logOk {
-        rn.votedFor = &arg.CandidateId
-	    return RequestVoteReply{ Term: rn.currentTerm, VoteGranted: true}
-    }
-	return RequestVoteReply{ Term: rn.currentTerm, VoteGranted: false}
-}
+//     // logOk is to make sure that the candidates have at least the same log as the follower to prevent electing a leader with less logs
+//     if (rn.votedFor == nil || *rn.votedFor == arg.CandidateId) && logOk {
+//         rn.votedFor = &arg.CandidateId
+// 	    return RequestVoteReply{ Term: rn.currentTerm, VoteGranted: true}
+//     }
+// 	return RequestVoteReply{ Term: rn.currentTerm, VoteGranted: false}
+// }
 
-func (rn *RaftNode) HandleAppendEntries(arg AppendEntries) AppendEntriesReply {
-    if arg.Term < rn.currentTerm {
-        return AppendEntriesReply{Term: rn.currentTerm, Success: false}
-    }
+// func (rn *RaftNode) HandleAppendEntries(arg AppendEntries) AppendEntriesReply {
+//     if arg.Term < rn.currentTerm {
+//         return AppendEntriesReply{Term: rn.currentTerm, Success: false}
+//     }
 
-    if arg.Term > rn.currentTerm {
-        rn.currentTerm = arg.Term
-        rn.state = Follower
-        rn.votedFor = nil
-    }
+//     if arg.Term > rn.currentTerm {
+//         rn.currentTerm = arg.Term
+//         rn.state = Follower
+//         rn.votedFor = nil
+//     }
 
-    if arg.PrevLogIndex >= len(rn.log) || rn.log[arg.PrevLogIndex].Term != arg.PrevLogTerm {
-        return AppendEntriesReply{Term: rn.currentTerm, Success: false}
-    }
+//     if arg.PrevLogIndex >= len(rn.log) || rn.log[arg.PrevLogIndex].Term != arg.PrevLogTerm {
+//         return AppendEntriesReply{Term: rn.currentTerm, Success: false}
+//     }
 
-    // Rule 3 from paper
-    for i, entry := range arg.Entries {
-        logIndex := arg.PrevLogIndex + 1 + i
-        if logIndex < len(rn.log) && rn.log[logIndex].Term != entry.Term {
-            rn.log = rn.log[:logIndex] // delete from conflict point onwards
-            break
-        }
-    }
+//     // Rule 3 from paper
+//     for i, entry := range arg.Entries {
+//         logIndex := arg.PrevLogIndex + 1 + i
+//         if logIndex < len(rn.log) && rn.log[logIndex].Term != entry.Term {
+//             rn.log = rn.log[:logIndex] // delete from conflict point onwards
+//             break
+//         }
+//     }
 
-    // Rule 4 form paper
-    for i, entry := range arg.Entries {
-        logIndex := arg.PrevLogIndex + 1 + i
-        if logIndex >= len(rn.log) {
-            rn.log = append(rn.log, entry)
-        }
-    }
+//     // Rule 4 form paper
+//     for i, entry := range arg.Entries {
+//         logIndex := arg.PrevLogIndex + 1 + i
+//         if logIndex >= len(rn.log) {
+//             rn.log = append(rn.log, entry)
+//         }
+//     }
 
-    // Rule 5 — update commitIndex
-    if arg.LeaderCommit > rn.commitIndex {
-        rn.commitIndex = min(arg.LeaderCommit, len(rn.log)-1)
-    }
+//     // Rule 5 — update commitIndex
+//     if arg.LeaderCommit > rn.commitIndex {
+//         rn.commitIndex = min(arg.LeaderCommit, len(rn.log)-1)
+//     }
 
-    return AppendEntriesReply{Term: rn.currentTerm, Success: true}
-}
+//     return AppendEntriesReply{Term: rn.currentTerm, Success: true}
+// }
 
-func (rn *RaftNode) run() {
-    rn.log = []LogEntry{{Term: 0, Command: nil}}
+// func (rn *RaftNode) run() {
+//     rn.log = []LogEntry{{Term: 0, Command: nil}}
 
-    //i need to reset votedFor
+//     //i need to reset votedFor
 
-    leaderTime := time.Duration(100) * time.Millisecond
-    randomTime := time.Duration(150+rand.Intn(150)) * time.Millisecond // the randemazation is not correct	
-    // i need to fix the randomazation by sending a random parameter 'rand.Intn(150)' from the loop to make sure it is not the same every time
+//     leaderTime := time.Duration(100) * time.Millisecond
+//     randomTime := time.Duration(150+rand.Intn(150)) * time.Millisecond // the randemazation is not correct	
+//     // i need to fix the randomazation by sending a random parameter 'rand.Intn(150)' from the loop to make sure it is not the same every time
 
-    leaderTimer := time.NewTimer(leaderTime)
-    randomTimer := time.NewTimer(randomTime)
+//     leaderTimer := time.NewTimer(leaderTime)
+//     randomTimer := time.NewTimer(randomTime)
 
-    nodeNum := 5
-    for {
-        switch rn.state {
-        case Follower:
-            select{
-            case <-randomTimer.C:
-                rn.state = Candidate
-                randomTimer.Reset(randomTime)
-            case arg := <- rn.AppendEntriesCh:
-                randomTimer.Reset(randomTime)
-                rn.HandleAppendEntries(arg)
-            case arg := <- rn.RequestVoteCh:
-                rn.HandleRequestVote(arg)
-            case req := <-rn.ClientCommandCh:
-                if rn.state != Leader {
-                    req.responseCh <- errors.New("Not Leader")
-                    continue
-                }
-            }
-        case Candidate: 
-            rn.currentTerm ++
-            rn.votedFor = &rn.id
-            randomTimer.Reset(randomTime)
+//     nodeNum := 5
+//     for {
+//         switch rn.state {
+//         case Follower:
+//             select{
+//             case <-randomTimer.C:
+//                 rn.state = Candidate
+//                 randomTimer.Reset(randomTime)
+//             case arg := <- rn.AppendEntriesCh:
+//                 randomTimer.Reset(randomTime)
+//                 rn.HandleAppendEntries(arg)
+//             case arg := <- rn.RequestVoteCh:
+//                 rn.HandleRequestVote(arg)
+//             case req := <-rn.ClientCommandCh:
+//                 if rn.state != Leader {
+//                     req.responseCh <- errors.New("Not Leader")
+//                     continue
+//                 }
+//             }
+//         case Candidate: 
+//             rn.currentTerm ++
+//             rn.votedFor = &rn.id
+//             randomTimer.Reset(randomTime)
 
-            logNum := 0
+//             logNum := 0
 
-            argRV := RequestVote{
-                Term: rn.currentTerm,
-                CandidateId: rn.id,
-                LastLogIndex: logNum,
-                LastLogTerm: rn.log[logNum].Term , 
-            }
+//             argRV := RequestVote{
+//                 Term: rn.currentTerm,
+//                 CandidateId: rn.id,
+//                 LastLogIndex: logNum,
+//                 LastLogTerm: rn.log[logNum].Term , 
+//             }
 
-            // i need a finction that allow me to know how many nodes are available      
-            // i will need this information in 3 spret places (to send the vote and append requests and to calculate the votes)
-            // for now i will fill the node number statically (and i should use rn.peers )
+//             // i need a finction that allow me to know how many nodes are available      
+//             // i will need this information in 3 spret places (to send the vote and append requests and to calculate the votes)
+//             // for now i will fill the node number statically (and i should use rn.peers )
             
-            votes := 1
+//             votes := 1
 
-            replyCh := make(chan RequestVoteReply, nodeNum-1) // i should use len(rn.peers) insted of static number
+//             replyCh := make(chan RequestVoteReply, nodeNum-1) // i should use len(rn.peers) insted of static number
 
-            for num := 1; num < nodeNum; num++ {
-                go func(peer int) {
-                    argRVRepply := RequestVoteReply{}
-                    ok := rn.sendRequestVote(peer, argRV, &argRVRepply)
-                    if ok {
-                        replyCh <- argRVRepply
-                    }
-                }(num)
-            }
-            ElectionLoop:
-            for {
-                select{
-                case reply := <-replyCh:
-                if reply.VoteGranted {
-                    votes++
-                    if votes > nodeNum / 2 {
-                        rn.state = Leader
-                        // initialize leader state, send heartbeats...
-                        break ElectionLoop
-                    }
-                }
-                case arg := <- rn.AppendEntriesCh:
-                    rn.state = Follower
-                    randomTimer.Reset(randomTime)
-                    rn.HandleAppendEntries(arg)
-                    break ElectionLoop
-                case <-randomTimer.C:
-                    break ElectionLoop
-                }                
-            }
+//             for num := 1; num < nodeNum; num++ {
+//                 go func(peer int) {
+//                     argRVRepply := RequestVoteReply{}
+//                     ok := rn.sendRequestVote(peer, argRV, &argRVRepply)
+//                     if ok {
+//                         replyCh <- argRVRepply
+//                     }
+//                 }(num)
+//             }
+//             ElectionLoop:
+//             for {
+//                 select{
+//                 case reply := <-replyCh:
+//                 if reply.VoteGranted {
+//                     votes++
+//                     if votes > nodeNum / 2 {
+//                         rn.state = Leader
+//                         // initialize leader state, send heartbeats...
+//                         break ElectionLoop
+//                     }
+//                 }
+//                 case arg := <- rn.AppendEntriesCh:
+//                     rn.state = Follower
+//                     randomTimer.Reset(randomTime)
+//                     rn.HandleAppendEntries(arg)
+//                     break ElectionLoop
+//                 case <-randomTimer.C:
+//                     break ElectionLoop
+//                 }                
+//             }
 
-            req := <-rn.ClientCommandCh
-            if rn.state != Leader {
-                req.responseCh <- errors.New("Not Leader")
-            }
+//             req := <-rn.ClientCommandCh
+//             if rn.state != Leader {
+//                 req.responseCh <- errors.New("Not Leader")
+//             }
         
-        case Leader:
-            select{
-            case <-leaderTimer.C:
-                for i := 0; i < nodeNum; i++ {
-                    if i == rn.id {
-                        continue
-                    }
-                    rn.mu.Lock()
-                    arg := AppendEntries{
-                        Term : rn.currentTerm,
-                        LeaderId: rn.id,
-                        PrevLogIndex : rn.nextIndex[i] - 1,
-                        PrevLogTerm : rn.log[rn.nextIndex[i] - 1].Term,
-                        Entries: []LogEntry{},
-                        LeaderCommit: rn.commitIndex,
-                    }
-                    rn.mu.Unlock()
-                    go func(server int, arg AppendEntries) {
-                        argRepply := AppendEntriesReply{}
-                        ok := rn.sendAppendEntries(server, arg, &argRepply)
-                        if !ok {
-                            return
-                        }
+//         case Leader:
+//             select{
+//             case <-leaderTimer.C:
+//                 for i := 0; i < nodeNum; i++ {
+//                     if i == rn.id {
+//                         continue
+//                     }
+//                     rn.mu.Lock()
+//                     arg := AppendEntries{
+//                         Term : rn.currentTerm,
+//                         LeaderId: rn.id,
+//                         PrevLogIndex : rn.nextIndex[i] - 1,
+//                         PrevLogTerm : rn.log[rn.nextIndex[i] - 1].Term,
+//                         Entries: []LogEntry{},
+//                         LeaderCommit: rn.commitIndex,
+//                     }
+//                     rn.mu.Unlock()
+//                     go func(server int, arg AppendEntries) {
+//                         argRepply := AppendEntriesReply{}
+//                         ok := rn.sendAppendEntries(server, arg, &argRepply)
+//                         if !ok {
+//                             return
+//                         }
                         
-                        rn.mu.Lock()
-                        defer rn.mu.Unlock()
-                        if argRepply.Term > rn.currentTerm {
-                            rn.currentTerm = argRepply.Term
-                            rn.state = Follower
-                            rn.votedFor = nil
-                        }
-                    }(i, arg)
-                }
-                leaderTimer.Reset(leaderTime)
+//                         rn.mu.Lock()
+//                         defer rn.mu.Unlock()
+//                         if argRepply.Term > rn.currentTerm {
+//                             rn.currentTerm = argRepply.Term
+//                             rn.state = Follower
+//                             rn.votedFor = nil
+//                         }
+//                     }(i, arg)
+//                 }
+//                 leaderTimer.Reset(leaderTime)
            
-            case req := <- rn.ClientCommandCh:
-                rn.log = append(rn.log, LogEntry{
-                    Command: req.command,
-                    Term: rn.currentTerm,
-                })
+//             case req := <- rn.ClientCommandCh:
+//                 rn.log = append(rn.log, LogEntry{
+//                     Command: req.command,
+//                     Term: rn.currentTerm,
+//                 })
 
-                // i need to make sure not to send it to myself
-                for i := 0; i < nodeNum; i++ {
-                    if i == rn.id {
-                        continue
-                    }
+//                 // i need to make sure not to send it to myself
+//                 for i := 0; i < nodeNum; i++ {
+//                     if i == rn.id {
+//                         continue
+//                     }
 
-                    if len(rn.log) - 1 >= rn.nextIndex[i] {
-                        go func(server int) {
-                            argRepply := AppendEntriesReply{}
-                            for {
-                                rn.mu.Lock()
-                                if rn.state != Leader {
-                                    rn.mu.Unlock()
-                                    return
-                                }
+//                     if len(rn.log) - 1 >= rn.nextIndex[i] {
+//                         go func(server int) {
+//                             argRepply := AppendEntriesReply{}
+//                             for {
+//                                 rn.mu.Lock()
+//                                 if rn.state != Leader {
+//                                     rn.mu.Unlock()
+//                                     return
+//                                 }
 
-                                prevIdx := rn.nextIndex[server] - 1
-                                args := AppendEntries{
-                                    Term: rn.currentTerm,
-                                    LeaderId: rn.id,
-                                    PrevLogIndex: prevIdx,
-                                    PrevLogTerm:  rn.log[prevIdx].Term,
-                                    Entries: rn.log[rn.nextIndex[server]:],
-                                    LeaderCommit: rn.commitIndex,
-                                }
-                                rn.mu.Unlock()
+//                                 prevIdx := rn.nextIndex[server] - 1
+//                                 args := AppendEntries{
+//                                     Term: rn.currentTerm,
+//                                     LeaderId: rn.id,
+//                                     PrevLogIndex: prevIdx,
+//                                     PrevLogTerm:  rn.log[prevIdx].Term,
+//                                     Entries: rn.log[rn.nextIndex[server]:],
+//                                     LeaderCommit: rn.commitIndex,
+//                                 }
+//                                 rn.mu.Unlock()
 
-                                ok := rn.sendAppendEntries(server, args, &argRepply)
-                                if !ok {
-                                    return
-                                } 
+//                                 ok := rn.sendAppendEntries(server, args, &argRepply)
+//                                 if !ok {
+//                                     return
+//                                 } 
 
-                                rn.mu.Lock()
+//                                 rn.mu.Lock()
 
-                                if argRepply.Term > rn.currentTerm {
-                                    rn.currentTerm = argRepply.Term
-                                    rn.state = Follower
-                                    rn.votedFor = nil
-                                    rn.mu.Unlock()
-                                    return
-                                }
+//                                 if argRepply.Term > rn.currentTerm {
+//                                     rn.currentTerm = argRepply.Term
+//                                     rn.state = Follower
+//                                     rn.votedFor = nil
+//                                     rn.mu.Unlock()
+//                                     return
+//                                 }
 
-                                if argRepply.Success {
-                                    rn.nextIndex[server] = args.PrevLogIndex + len(args.Entries) + 1
-                                    rn.matchIndex[server] = rn.nextIndex[server] - 1
+//                                 if argRepply.Success {
+//                                     rn.nextIndex[server] = args.PrevLogIndex + len(args.Entries) + 1
+//                                     rn.matchIndex[server] = rn.nextIndex[server] - 1
 
-                                    rn.mu.Unlock()
-                                    return
-                                }else {
-                                    rn.nextIndex[server]--
-                                    rn.mu.Unlock()
-                                }
-                            }
-                        }(i)  
-                    } 
-                }
-                // update commitIndex and matchIndex
-            }
+//                                     rn.mu.Unlock()
+//                                     return
+//                                 }else {
+//                                     rn.nextIndex[server]--
+//                                     rn.mu.Unlock()
+//                                 }
+//                             }
+//                         }(i)  
+//                     } 
+//                 }
+//                 // update commitIndex and matchIndex
+//             }
            
-        }
-    }
-}
+//         }
+//     }
+// }
 
-func (rn *RaftNode) ClientCommand(command interface{}) error {
-    if command == nil {
-        return errors.New("nil command")
-    }
-    req := clientRequest{
-        command:    command,
-        responseCh: make(chan error),
-    }
+// func (rn *RaftNode) ClientCommand(command interface{}) error {
+//     if command == nil {
+//         return errors.New("nil command")
+//     }
+//     req := clientRequest{
+//         command:    command,
+//         responseCh: make(chan error),
+//     }
 
-    rn.ClientCommandCh <- req
+//     rn.ClientCommandCh <- req
 
-    return <-req.responseCh 
-}
+//     return <-req.responseCh 
+// }
