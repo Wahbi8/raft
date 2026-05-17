@@ -268,7 +268,7 @@ func (rn *RaftNode) run() {
                     rn.mu.Unlock()
                     go func(server int, arg AppendEntries) {
                         argRepply := AppendEntriesReply{}
-                        ok := rn.sendAppendEntries(i, arg, &argRepply)
+                        ok := rn.sendAppendEntries(server, arg, &argRepply)
                         if !ok {
                             return
                         }
@@ -296,22 +296,27 @@ func (rn *RaftNode) run() {
                         continue
                     }
 
-                    prevIdx := rn.nextIndex[i] - 1
-                    rn.mu.Lock()
-                    arg := AppendEntries{
-                        Term: rn.currentTerm,
-                        LeaderId: rn.id,
-                        PrevLogIndex: prevIdx,
-                        PrevLogTerm:  rn.log[prevIdx].Term,
-                        Entries: rn.log[rn.nextIndex[i]:],
-                        LeaderCommit: rn.commitIndex,
-                    }
-                    rn.mu.Unlock()
-
                     if len(rn.log) - 1 >= rn.nextIndex[i] {
-                        go func(server int, args AppendEntries) {
+                        go func(server int) {
                             argRepply := AppendEntriesReply{}
                             for {
+                                rn.mu.Lock()
+                                if rn.state != Leader {
+                                    rn.mu.Unlock()
+                                    return
+                                }
+
+                                prevIdx := rn.nextIndex[server] - 1
+                                args := AppendEntries{
+                                    Term: rn.currentTerm,
+                                    LeaderId: rn.id,
+                                    PrevLogIndex: prevIdx,
+                                    PrevLogTerm:  rn.log[prevIdx].Term,
+                                    Entries: rn.log[rn.nextIndex[server]:],
+                                    LeaderCommit: rn.commitIndex,
+                                }
+                                rn.mu.Unlock()
+
                                 ok := rn.sendAppendEntries(server, args, &argRepply)
                                 if !ok {
                                     return
@@ -338,7 +343,7 @@ func (rn *RaftNode) run() {
                                     rn.mu.Unlock()
                                 }
                             }
-                        }(i, arg)  
+                        }(i)  
                     } 
                 }
                 // update commitIndex and matchIndex
